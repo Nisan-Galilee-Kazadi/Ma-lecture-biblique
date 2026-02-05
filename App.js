@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
+import React, { useState, useEffect, createContext, useContext, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -23,7 +23,7 @@ import {
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useFocusEffect } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import * as Notifications from 'expo-notifications';
 import * as ImagePicker from 'expo-image-picker';
@@ -55,8 +55,7 @@ import {
   Plus,
   Trash2,
   Search,
-  Info,
-  LayoutGrid
+  Info
 } from 'lucide-react-native';
 
 Notifications.setNotificationHandler({
@@ -107,23 +106,6 @@ const BIBLE_BOOKS_MAP = {
   '1 TIMOTHÉE': 54, '2 TIMOTHÉE': 55, 'TITE': 56, 'PHILÉMON': 57, 'HÉBREUX': 58,
   'JACQUES': 59, '1 PIERRE': 60, '2 PIERRE': 61, '1 JEAN': 62, '2 JEAN': 63,
   '3 JEAN': 64, 'JUDE': 65, 'RÉVÉLATION': 66
-};
-
-const BOOK_ABBREVIATIONS = {
-  'GENÈSE': 'Gn', 'EXODE': 'Ex', 'LÉVITIQUE': 'Lv', 'NOMBRES': 'Nb', 'DEUTÉRONOME': 'Dt',
-  'JOSUÉ': 'Jos', 'JUGES': 'Jg', 'RUTH': 'Ru', '1 SAMUEL': '1S', '2 SAMUEL': '2S',
-  '1 ROIS': '1R', '2 ROIS': '2R', '1 CHRONIQUES': '1Ch', '2 CHRONIQUES': '2Ch',
-  'ESDRAS': 'Esd', 'NÉHÉMIE': 'Né', 'ESTHER': 'Est', 'JOB': 'Jb', 'PSAUMES': 'Ps',
-  'PROVERBES': 'Pr', 'ECCLÉSIASTE': 'Ec', 'CHANT DE SALOMON': 'Ct', 'ISAÏE': 'Is',
-  'JÉRÉMIE': 'Jr', 'LAMENTATIONS': 'Lm', 'ÉZÉCHIEL': 'Éz', 'DANIEL': 'Dn', 'OSÉE': 'Os',
-  'JOËL': 'Jl', 'AMOS': 'Am', 'ABDIAS': 'Ab', 'JONAS': 'Jon', 'MICHÉE': 'Mi',
-  'NAHUM': 'Na', 'HABACUC': 'Hab', 'SOPHONIE': 'Sph', 'AGGÉE': 'Ag', 'ZACHARIE': 'Za',
-  'MALACHIE': 'Ml', 'MATTHIEU': 'Mt', 'MARC': 'Mc', 'LUC': 'Lc', 'JEAN': 'Jean',
-  'ACTES': 'Ac', 'ROMAINS': 'Rm', '1 CORINTHIENS': '1Co', '2 CORINTHIENS': '2Co', 'GALATES': 'Ga',
-  'ÉPHÉSIENS': 'Éph', 'PHILIPPIENS': 'Php', 'COLOSSIENS': 'Col', '1 THESSALONICIENS': '1Th', '2 THESSALONICIENS': '2Th',
-  '1 TIMOTHÉE': '1Tm', '2 TIMOTHÉE': '2Tm', 'TITE': 'Tt', 'PHILÉMON': 'Phm', 'HÉBREUX': 'Hé',
-  'JACQUES': 'Jc', '1 PIERRE': '1P', '2 PIERRE': '2P', '1 JEAN': '1Jn', '2 JEAN': '2Jn',
-  '3 JEAN': '3Jn', 'JUDE': 'Jude', 'RÉVÉLATION': 'Rév'
 };
 
 // --- Données du Plan de Lecture (Plan Officiel JW.ORG - 368 sections) ---
@@ -786,145 +768,52 @@ const LegendModal = ({ visible, info, onClose, theme }) => {
   );
 };
 
-const BookGridModal = ({ visible, onClose, onSelectBook, theme }) => {
-  const hebrewBooks = Object.keys(BIBLE_BOOKS_MAP).slice(0, 39);
-  const greekBooks = Object.keys(BIBLE_BOOKS_MAP).slice(39);
-
-  const getBookColor = (book) => {
-    const index = Object.keys(BIBLE_BOOKS_MAP).indexOf(book) + 1;
-    // Pentateuque (1-5) : Foncé
-    if (index <= 5) return COLORS.jwBlue;
-    // Historiques (6-17) : Clair
-    if (index >= 6 && index <= 17) return COLORS.christian;
-    // Poétiques & Prophétiques (18-39) : Foncé
-    if (index >= 18 && index <= 39) return COLORS.jwBlue;
-    // Évangiles (40-43) : Foncé
-    if (index >= 40 && index <= 43) return COLORS.jwBlue;
-    // Actes (44) : Clair
-    if (index === 44) return COLORS.christian;
-    // Lettres (45-65) : Clair
-    if (index >= 45 && index <= 65) return COLORS.christian;
-    // Révélation (66) : Foncé
-    return COLORS.jwBlue;
-  };
-
-  const renderGrid = (books) => (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 6 }}>
-      {books.map((book) => (
-        <TouchableOpacity
-          key={book}
-          style={{
-            width: '18%',
-            aspectRatio: 1,
-            backgroundColor: getBookColor(book),
-            justifyContent: 'center',
-            alignItems: 'center',
-            borderRadius: 2,
-            borderWidth: 1,
-            borderColor: '#fff',
-          }}
-          onPress={() => onSelectBook(book)}
-        >
-          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>
-            {BOOK_ABBREVIATIONS[book] || book.substring(0, 2)}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={[styles.settingsBox, { backgroundColor: theme.card, height: '90%', padding: 0 }]}>
-          <View style={[styles.settingsHeader, { padding: 20, paddingBottom: 10 }]}>
-            <Text style={[styles.settingsTitle, { color: theme.text }]}>Navigation Rapide</Text>
-            <TouchableOpacity onPress={onClose}><X size={24} color={theme.text} /></TouchableOpacity>
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 40 }}>
-            <Text style={{ color: theme.text, fontWeight: 'bold', marginBottom: 10, marginTop: 5 }}>ÉCRITURES HÉBRAÏQUES ET ARAMÉENNES</Text>
-            {renderGrid(hebrewBooks)}
-
-            <Text style={{ color: theme.text, fontWeight: 'bold', marginBottom: 10, marginTop: 25 }}>ÉCRITURES GRECQUES CHRÉTIENNES</Text>
-            {renderGrid(greekBooks)}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
 
 function ReadingScreen() {
   const { progress, setProgress, history, setHistory, theme, openNoteEditor } = useContext(AppContext);
   const [legendVisible, setLegendVisible] = useState(false);
-  const [bookModalVisible, setBookModalVisible] = useState(false);
   const [legendInfo, setLegendInfo] = useState({ type: '', message: '' });
-  const listRef = useRef(null);
+  const sectionListRef = useRef(null);
 
   const sections = Object.entries(readingPlan).map(([title, data]) => ({
     title,
     data: data.flatMap(book => book.sections.map(s => ({ ...s, bookName: book.book })))
   }));
 
-  const handleScrollToBook = (bookName) => {
-    setBookModalVisible(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (history.length > 0 && sectionListRef.current) {
+        const lastRead = history[0]; // Le plus récent (ajouté en premier dans le tableau)
 
-    // Mapping spécial pour les livres groupés dans readingPlan
-    const bookMapping = {
-      'ABDIAS': 'ABDIAS/JONAS',
-      'JONAS': 'ABDIAS/JONAS',
-      'NAHUM': 'NAHUM/HABACUC',
-      'HABACUC': 'NAHUM/HABACUC',
-      'SOPHONIE': 'SOPHONIE/AGGÉE',
-      'AGGÉE': 'SOPHONIE/AGGÉE'
-    };
+        // Trouver les indices
+        let sectionIndex = -1;
+        let itemIndex = -1;
 
-    const searchName = bookMapping[bookName] || bookName;
-    let sectionIndex = -1;
-    let itemIndex = -1;
-
-    // Chercher dans toutes les sections
-    for (let i = 0; i < sections.length; i++) {
-      const sectionData = sections[i].data;
-      const index = sectionData.findIndex(item => {
-        // Vérifier si le nom du livre correspond exactement ou fait partie d'un groupe
-        return item.bookName === searchName ||
-          item.bookName === bookName ||
-          (item.bookName.includes('/') && item.bookName.includes(bookName));
-      });
-
-      if (index !== -1) {
-        sectionIndex = i;
-        itemIndex = index;
-        break;
-      }
-    }
-
-    if (sectionIndex !== -1 && listRef.current) {
-      setTimeout(() => {
-        try {
-          listRef.current.scrollToLocation({
-            sectionIndex,
-            itemIndex,
-            animated: true,
-            viewPosition: 0
-          });
-        } catch (error) {
-          console.log('Scroll error for', bookName, ':', error);
-          // Fallback: scroll to section header
-          listRef.current.scrollToLocation({
-            sectionIndex,
-            itemIndex: 0,
-            animated: true,
-            viewPosition: 0
-          });
+        for (let i = 0; i < sections.length; i++) {
+          const foundIndex = sections[i].data.findIndex(
+            item => item.bookName === lastRead.book && item.ch === lastRead.section
+          );
+          if (foundIndex !== -1) {
+            sectionIndex = i;
+            itemIndex = foundIndex;
+            break;
+          }
         }
-      }, 400);
-    } else {
-      console.log('Book not found:', bookName, 'searched as:', searchName);
-    }
-  };
+
+        if (sectionIndex !== -1 && itemIndex !== -1) {
+          // Petit délai pour laisser le temps au rendu si nécessaire
+          setTimeout(() => {
+            sectionListRef.current.scrollToLocation({
+              sectionIndex,
+              itemIndex,
+              viewPosition: 0.5, // Centrer l'élément
+              animated: true
+            });
+          }, 300);
+        }
+      }
+    }, [history])
+  );
 
   const showLegend = (type) => {
     const message = type === 'o'
@@ -965,9 +854,7 @@ function ReadingScreen() {
     const completionDate = historyEntry ? historyEntry.date : null;
 
     return (
-      <View
-        nativeID={id}
-        style={[styles.sectionRowJW, { borderBottomColor: theme.border, flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 15, paddingHorizontal: 15, backgroundColor: theme.card, marginBottom: 1, borderRadius: 5 }]}>
+      <View style={[styles.sectionRowJW, { borderBottomColor: theme.border, flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 15, paddingHorizontal: 15, backgroundColor: theme.card, marginBottom: 1, borderRadius: 5 }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity
@@ -1037,14 +924,8 @@ function ReadingScreen() {
         onClose={() => setLegendVisible(false)}
         theme={theme}
       />
-      <BookGridModal
-        visible={bookModalVisible}
-        onClose={() => setBookModalVisible(false)}
-        onSelectBook={handleScrollToBook}
-        theme={theme}
-      />
       <SectionList
-        ref={listRef}
+        ref={sectionListRef}
         sections={sections}
         keyExtractor={(item, index) => item.bookName + item.ch + index}
         renderItem={renderSectionItem}
@@ -1058,51 +939,20 @@ function ReadingScreen() {
         maxToRenderPerBatch={10}
         windowSize={5}
         removeClippedSubviews={true}
+        onScrollToIndexFailed={(info) => {
+          console.warn("Scroll failed", info);
+          setTimeout(() => {
+            if (sectionListRef.current) {
+              sectionListRef.current.scrollToLocation({
+                sectionIndex: info.index,
+                itemIndex: 0,
+                animated: false
+              });
+            }
+          }, 500);
+        }}
         contentContainerStyle={{ paddingBottom: 30 }}
       />
-
-      <View
-        style={{
-          position: 'absolute',
-          right: 2,
-          top: 100,
-          bottom: 100,
-          width: 30,
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => true}
-        onResponderMove={(evt) => {
-          const { locationY } = evt.nativeEvent;
-          const height = Dimensions.get('window').height - 200; // top 100 + bottom 100
-          const percentage = Math.max(0, Math.min(1, locationY / height));
-
-          if (sections.length > 0 && listRef.current) {
-            const sectionIndex = Math.floor(percentage * (sections.length - 1));
-            listRef.current.scrollToLocation({
-              sectionIndex,
-              itemIndex: 0,
-              animated: false,
-              viewOffset: 0
-            });
-          }
-        }}
-      >
-        <View style={{ width: 4, height: '100%', backgroundColor: '#ddd', borderRadius: 2 }}>
-          <View style={{ width: 4, height: 40, backgroundColor: COLORS.jwBlue, borderRadius: 2, position: 'absolute', top: '0%' }} />
-          {/* Note: Un vrai curseur demanderait un état pour la position Y, ici c'est une zone tactile simple */}
-        </View>
-      </View>
-
-
-      {/* Grid Menu */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => setBookModalVisible(true)}
-      >
-        <LayoutGrid size={24} color="#fff" />
-      </TouchableOpacity>
     </View>
   );
 }
