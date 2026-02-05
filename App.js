@@ -56,8 +56,7 @@ import {
   Trash2,
   Search,
   Info,
-  LayoutGrid,
-  ArrowUp
+  LayoutGrid
 } from 'lucide-react-native';
 
 Notifications.setNotificationHandler({
@@ -788,34 +787,66 @@ const LegendModal = ({ visible, info, onClose, theme }) => {
 };
 
 const BookGridModal = ({ visible, onClose, onSelectBook, theme }) => {
+  const hebrewBooks = Object.keys(BIBLE_BOOKS_MAP).slice(0, 39);
+  const greekBooks = Object.keys(BIBLE_BOOKS_MAP).slice(39);
+
+  const getBookColor = (book) => {
+    const index = Object.keys(BIBLE_BOOKS_MAP).indexOf(book) + 1;
+    // Pentateuque (1-5) : Foncé
+    if (index <= 5) return COLORS.jwBlue;
+    // Historiques (6-17) : Clair
+    if (index >= 6 && index <= 17) return COLORS.christian;
+    // Poétiques & Prophétiques (18-39) : Foncé
+    if (index >= 18 && index <= 39) return COLORS.jwBlue;
+    // Évangiles (40-43) : Foncé
+    if (index >= 40 && index <= 43) return COLORS.jwBlue;
+    // Actes (44) : Clair
+    if (index === 44) return COLORS.christian;
+    // Lettres (45-65) : Clair
+    if (index >= 45 && index <= 65) return COLORS.christian;
+    // Révélation (66) : Foncé
+    return COLORS.jwBlue;
+  };
+
+  const renderGrid = (books) => (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 6 }}>
+      {books.map((book) => (
+        <TouchableOpacity
+          key={book}
+          style={{
+            width: '18%',
+            aspectRatio: 1,
+            backgroundColor: getBookColor(book),
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderRadius: 2,
+            borderWidth: 1,
+            borderColor: '#fff',
+          }}
+          onPress={() => onSelectBook(book)}
+        >
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>
+            {BOOK_ABBREVIATIONS[book] || book.substring(0, 2)}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <View style={[styles.settingsBox, { backgroundColor: theme.card, height: '80%' }]}>
-          <View style={styles.settingsHeader}>
+        <View style={[styles.settingsBox, { backgroundColor: theme.card, height: '90%', padding: 0 }]}>
+          <View style={[styles.settingsHeader, { padding: 20, paddingBottom: 10 }]}>
             <Text style={[styles.settingsTitle, { color: theme.text }]}>Navigation Rapide</Text>
             <TouchableOpacity onPress={onClose}><X size={24} color={theme.text} /></TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingBottom: 20 }}>
-            {Object.keys(BIBLE_BOOKS_MAP).map((book) => (
-              <TouchableOpacity
-                key={book}
-                style={{
-                  width: '18%',
-                  aspectRatio: 1,
-                  backgroundColor: book === 'MATTHIEU' ? COLORS.christian : (Object.keys(BIBLE_BOOKS_MAP).indexOf(book) < 39 ? COLORS.jwBlue : COLORS.christian),
-                  borderRadius: 8,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  opacity: book === 'MATTHIEU' ? 1 : 0.8
-                }}
-                onPress={() => onSelectBook(book)}
-              >
-                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>
-                  {BOOK_ABBREVIATIONS[book] || book.substring(0, 2)}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 40 }}>
+            <Text style={{ color: theme.text, fontWeight: 'bold', marginBottom: 10, marginTop: 5 }}>ÉCRITURES HÉBRAÏQUES ET ARAMÉENNES</Text>
+            {renderGrid(hebrewBooks)}
+
+            <Text style={{ color: theme.text, fontWeight: 'bold', marginBottom: 10, marginTop: 25 }}>ÉCRITURES GRECQUES CHRÉTIENNES</Text>
+            {renderGrid(greekBooks)}
           </ScrollView>
         </View>
       </View>
@@ -996,13 +1027,40 @@ function ReadingScreen() {
         contentContainerStyle={{ paddingBottom: 30 }}
       />
 
-      {/* Scroll to Top */}
-      <TouchableOpacity
-        style={[styles.fab, { bottom: 100, width: 45, height: 45, backgroundColor: theme.card, borderWidth: 1, borderColor: '#eee' }]}
-        onPress={() => listRef.current?.scrollToLocation({ sectionIndex: 0, itemIndex: 0, animated: true })}
+      <View
+        style={{
+          position: 'absolute',
+          right: 2,
+          top: 100,
+          bottom: 100,
+          width: 30,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderMove={(evt) => {
+          const { locationY } = evt.nativeEvent;
+          const height = Dimensions.get('window').height - 200; // top 100 + bottom 100
+          const percentage = Math.max(0, Math.min(1, locationY / height));
+
+          if (sections.length > 0 && listRef.current) {
+            const sectionIndex = Math.floor(percentage * (sections.length - 1));
+            listRef.current.scrollToLocation({
+              sectionIndex,
+              itemIndex: 0,
+              animated: false,
+              viewOffset: 0
+            });
+          }
+        }}
       >
-        <ArrowUp size={20} color={theme.text} />
-      </TouchableOpacity>
+        <View style={{ width: 4, height: '100%', backgroundColor: '#ddd', borderRadius: 2 }}>
+          <View style={{ width: 4, height: 40, backgroundColor: COLORS.jwBlue, borderRadius: 2, position: 'absolute', top: '0%' }} />
+          {/* Note: Un vrai curseur demanderait un état pour la position Y, ici c'est une zone tactile simple */}
+        </View>
+      </View>
+
 
       {/* Grid Menu */}
       <TouchableOpacity
