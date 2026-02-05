@@ -869,12 +869,31 @@ function ReadingScreen() {
 
   const handleScrollToBook = (bookName) => {
     setBookModalVisible(false);
+
+    // Mapping spécial pour les livres groupés dans readingPlan
+    const bookMapping = {
+      'ABDIAS': 'ABDIAS/JONAS',
+      'JONAS': 'ABDIAS/JONAS',
+      'NAHUM': 'NAHUM/HABACUC',
+      'HABACUC': 'NAHUM/HABACUC',
+      'SOPHONIE': 'SOPHONIE/AGGÉE',
+      'AGGÉE': 'SOPHONIE/AGGÉE'
+    };
+
+    const searchName = bookMapping[bookName] || bookName;
     let sectionIndex = -1;
     let itemIndex = -1;
 
+    // Chercher dans toutes les sections
     for (let i = 0; i < sections.length; i++) {
       const sectionData = sections[i].data;
-      const index = sectionData.findIndex(item => item.bookName === bookName);
+      const index = sectionData.findIndex(item => {
+        // Vérifier si le nom du livre correspond exactement ou fait partie d'un groupe
+        return item.bookName === searchName ||
+          item.bookName === bookName ||
+          (item.bookName.includes('/') && item.bookName.includes(bookName));
+      });
+
       if (index !== -1) {
         sectionIndex = i;
         itemIndex = index;
@@ -892,7 +911,7 @@ function ReadingScreen() {
             viewPosition: 0
           });
         } catch (error) {
-          console.log('Scroll error:', error);
+          console.log('Scroll error for', bookName, ':', error);
           // Fallback: scroll to section header
           listRef.current.scrollToLocation({
             sectionIndex,
@@ -902,6 +921,8 @@ function ReadingScreen() {
           });
         }
       }, 400);
+    } else {
+      console.log('Book not found:', bookName, 'searched as:', searchName);
     }
   };
 
