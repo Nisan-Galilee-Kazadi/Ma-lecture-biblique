@@ -884,13 +884,24 @@ function ReadingScreen() {
 
     if (sectionIndex !== -1 && listRef.current) {
       setTimeout(() => {
-        listRef.current.scrollToLocation({
-          sectionIndex,
-          itemIndex,
-          animated: true,
-          viewOffset: 0
-        });
-      }, 300);
+        try {
+          listRef.current.scrollToLocation({
+            sectionIndex,
+            itemIndex,
+            animated: true,
+            viewPosition: 0
+          });
+        } catch (error) {
+          console.log('Scroll error:', error);
+          // Fallback: scroll to section header
+          listRef.current.scrollToLocation({
+            sectionIndex,
+            itemIndex: 0,
+            animated: true,
+            viewPosition: 0
+          });
+        }
+      }, 400);
     }
   };
 
@@ -933,7 +944,9 @@ function ReadingScreen() {
     const completionDate = historyEntry ? historyEntry.date : null;
 
     return (
-      <View style={[styles.sectionRowJW, { borderBottomColor: theme.border, flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 15, paddingHorizontal: 15, backgroundColor: theme.card, marginBottom: 1, borderRadius: 5 }]}>
+      <View
+        nativeID={id}
+        style={[styles.sectionRowJW, { borderBottomColor: theme.border, flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 15, paddingHorizontal: 15, backgroundColor: theme.card, marginBottom: 1, borderRadius: 5 }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity
