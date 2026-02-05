@@ -14,9 +14,14 @@ import {
   Switch,
   Platform,
   FlatList,
-  Linking
+  Linking,
+  BackHandler,
+  Animated,
+  SectionList,
+  StatusBar,
+  ActivityIndicator
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -189,6 +194,49 @@ const readingPlan = {
 
 const totalSections = 368;
 
+// --- Nouvel Écran de Chargement ---
+function LoadingScreen() {
+  const [progress] = useState(new Animated.Value(0));
+  const [fadeAnim] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 2500,
+        useNativeDriver: false,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
+
+  const width = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#f4f4f4', justifyContent: 'center', alignItems: 'center' }}>
+      <Animated.View style={{ opacity: fadeAnim, alignItems: 'center' }}>
+        <Image source={require('./assets/icon.png')} style={{ width: 120, height: 120, borderRadius: 30 }} />
+        <Text style={{ marginTop: 20, fontSize: 22, color: COLORS.jwBlue, fontWeight: 'bold', letterSpacing: 1 }}>
+          Ma Lecture de la Bible
+        </Text>
+      </Animated.View>
+      <View style={{ width: '70%', height: 6, backgroundColor: '#ddd', borderRadius: 3, marginTop: 40, overflow: 'hidden' }}>
+        <Animated.View style={{ height: '100%', backgroundColor: COLORS.jwBlue, width }} />
+      </View>
+      <Text style={{ marginTop: 15, fontSize: 12, color: '#999' }}>Initialisation de votre plan...</Text>
+    </View>
+  );
+}
+
+
+
 // --- Helper pour les liens JW.ORG ---
 const openJWLink = (bookName, section) => {
   const bookNum = BIBLE_BOOKS_MAP[bookName.toUpperCase()] || 1;
@@ -227,10 +275,23 @@ export default function App() {
   const [noteEditorVisible, setNoteEditorVisible] = useState(false);
   const [reminderConfig, setReminderConfig] = useState({});
   const [activeNote, setActiveNote] = useState({ id: '', text: '', tags: [] });
+  const [isAppLoading, setIsAppLoading] = useState(true);
 
   useEffect(() => {
     loadAppState();
   }, []);
+
+  useEffect(() => {
+    const backAction = () => {
+      if (showSettings) { setShowSettings(false); return true; }
+      if (showHistory) { setShowHistory(false); return true; }
+      if (noteEditorVisible) { setNoteEditorVisible(false); return true; }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [showSettings, showHistory, noteEditorVisible]);
 
   const loadAppState = async () => {
     try {
@@ -249,8 +310,15 @@ export default function App() {
       if (data.bibleNotes) setNotes(JSON.parse(data.bibleNotes));
       if (data.isDarkMode !== null) setIsDarkMode(JSON.parse(data.isDarkMode));
       if (data.reminderConfig) setReminderConfig(JSON.parse(data.reminderConfig));
-    } catch (e) { console.error(e); }
+
+      // Petit délai pour l'animation
+      setTimeout(() => setIsAppLoading(false), 2000);
+    } catch (e) {
+      console.error(e);
+      setIsAppLoading(false);
+    }
   };
+
 
   const themeColors = isDarkMode ? {
     bg: COLORS.bgDark,
@@ -266,7 +334,10 @@ export default function App() {
     border: COLORS.border
   };
 
+  if (isAppLoading) return <LoadingScreen />;
+
   if (isFirstLaunch) {
+
     return <OnboardingScreen onComplete={(name) => {
       setUserName(name);
       setIsFirstLaunch(false);
@@ -287,7 +358,7 @@ export default function App() {
       }
     }}>
       <SafeAreaView style={{ flex: 1, backgroundColor: themeColors.bg }}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.jwBlue} />
+        <ExpoStatusBar style="light" backgroundColor={COLORS.jwBlue} />
         <NavigationContainer>
           <TabNavigator
             onSettingsPress={() => setShowSettings(true)}
@@ -360,30 +431,122 @@ function TabNavigator({ onSettingsPress, onHistoryPress }) {
 // --- Écrans ---
 
 function OnboardingScreen({ onComplete }) {
+  const [step, setStep] = useState(0);
   const [name, setName] = useState('');
+  const slideAnim = useState(new Animated.Value(50))[0];
+  const opacityAnim = useState(new Animated.Value(0))[0];
+
+  const steps = [
+    {
+      title: "Bienvenue !",
+      desc: "Prêt à transformer votre lecture de la Bible en une habitude quotidienne ?",
+      icon: <BookOpen size={60} color="#fff" />,
+      color: COLORS.jwBlue
+    },
+    {
+      title: "Tableau de Bord",
+      desc: "Suivez votre progression annuelle globale et découvrez une pensée biblique chaque jour.",
+      icon: <Home size={60} color="#fff" />,
+      color: COLORS.primary
+    },
+    {
+      title: "Plan de Lecture",
+      desc: "368 sections pour lire toute la Bible. Cochez-les au fur et à mesure pour rester motivé.",
+      icon: <CheckSquare size={60} color="#fff" />,
+      color: '#2e7d32'
+    },
+    {
+      title: "Notes Personnelles",
+      desc: "Notez vos méditations et organisez-les avec des tags pour les retrouver facilement.",
+      icon: <FileText size={60} color="#fff" />,
+      color: '#ed6c02'
+    },
+    {
+      title: "Accès JW.ORG",
+      desc: "Chaque section contient un lien direct vers la Bibliothèque en ligne (WOL) pour approfondir.",
+      icon: <ExternalLink size={60} color="#fff" />,
+      color: '#1976d2'
+    },
+    {
+      title: "Sécurisation des Données",
+      desc: "Exportez vos notes et votre progression pour ne jamais les perdre, même si vous changez de téléphone.",
+      icon: <Save size={60} color="#fff" />,
+      color: '#7b1fa2'
+    },
+    {
+      title: "Personnalisation",
+      desc: "Configurez des rappels et activez le Mode Sombre pour une lecture reposante le soir.",
+      icon: <SettingsIcon size={60} color="#fff" />,
+      color: '#455a64'
+    },
+    {
+      title: "Finalisons ensemble",
+      desc: "Comment devrions-nous vous appeler ? Votre profil peut être complété plus tard dans les paramètres.",
+      icon: <User size={60} color="#fff" />,
+      color: COLORS.jwBlue,
+      input: true
+    }
+  ];
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: 400, useNativeDriver: true })
+    ]).start();
+  }, [step]);
+
+  const nextStep = () => {
+    if (step < steps.length - 1) {
+      slideAnim.setValue(30);
+      opacityAnim.setValue(0);
+      setStep(step + 1);
+    } else {
+      if (name.length > 2) onComplete(name);
+    }
+  };
+
+  const currentStep = steps[step];
+
   return (
     <View style={styles.onboarding}>
-      <View style={styles.onboardingContent}>
-        <View style={styles.logoCircle}><BookOpen size={50} color="#fff" /></View>
-        <Text style={styles.onboardingTitle}>Lecture de la Bible</Text>
-        <Text style={styles.onboardingDev}>Développé par votre frère</Text>
-        <TextInput
-          style={styles.onboardingInput}
-          placeholder="Votre nom..."
-          value={name}
-          onChangeText={setName}
-        />
+      <Animated.View style={[styles.onboardingContent, { transform: [{ translateY: slideAnim }], opacity: opacityAnim }]}>
+        <View style={[styles.logoCircle, { backgroundColor: currentStep.color }]}>{currentStep.icon}</View>
+        <Text style={[styles.onboardingTitle, { color: currentStep.color }]}>{currentStep.title}</Text>
+        <Text style={[styles.onboardingDev, { textAlign: 'center', marginBottom: 25, fontSize: 15, lineHeight: 22 }]}>
+          {currentStep.desc}
+        </Text>
+
+        {currentStep.input && (
+          <TextInput
+            style={[styles.onboardingInput, { borderColor: currentStep.color }]}
+            placeholder="Votre nom..."
+            value={name}
+            onChangeText={setName}
+            autoFocus
+          />
+        )}
+
+        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 30 }}>
+          {steps.map((_, i) => (
+            <View key={i} style={{ width: step === i ? 20 : 8, height: 8, borderRadius: 4, backgroundColor: i === step ? currentStep.color : '#ddd' }} />
+          ))}
+        </View>
+
         <TouchableOpacity
-          style={[styles.onboardingBtn, { backgroundColor: name.length > 2 ? COLORS.jwBlue : '#ccc' }]}
-          onPress={() => name.length > 2 && onComplete(name)}
-          disabled={name.length <= 2}
+          style={[styles.onboardingBtn, { backgroundColor: (currentStep.input && name.length <= 2) ? '#ccc' : currentStep.color }]}
+          onPress={nextStep}
+          disabled={currentStep.input && name.length <= 2}
         >
-          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Commencer</Text>
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
+            {step === steps.length - 1 ? "C'est parti !" : "Suivant"}
+          </Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     </View>
   );
 }
+
+
 
 function HomeScreen() {
   const { userName, userPhoto, progress, theme, notes, openNoteEditor } = useContext(AppContext);
@@ -496,38 +659,84 @@ function HomeScreen() {
   );
 }
 
-const LegendModal = ({ visible, info, onClose, theme }) => (
-  <Modal visible={visible} transparent animationType="fade">
-    <View style={styles.modalOverlay}>
-      <View style={[styles.legendModalBox, { backgroundColor: theme.card }]}>
-        <View style={{ alignItems: 'center', marginBottom: 20 }}>
-          {info.type === 'o' ? (
-            <Text style={{ color: COLORS.prophetic, fontSize: 40 }}>♦</Text>
-          ) : (
-            <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: COLORS.christian }} />
-          )}
-        </View>
-        <Text style={[styles.legendModalTitle, { color: theme.text, textAlign: 'center' }]}>
-          {info.type === 'o' ? "Aperçu Historique" : "Aperçu Chronologique"}
-        </Text>
-        <Text style={[styles.legendModalBody, { color: theme.text, textAlign: 'center', lineHeight: 24 }]}>
-          {info.message}
-        </Text>
-        <TouchableOpacity
-          style={[styles.legendCloseBtn, { backgroundColor: COLORS.primary }]}
-          onPress={onClose}
-        >
-          <Text style={{ color: '#fff', fontWeight: 'bold' }}>J'ai compris</Text>
-        </TouchableOpacity>
+const LegendModal = ({ visible, info, onClose, theme }) => {
+  const scaleAnim = useState(new Animated.Value(0.8))[0];
+  const opacityAnim = useState(new Animated.Value(0))[0];
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: 300, useNativeDriver: true })
+      ]).start();
+    } else {
+      scaleAnim.setValue(0.8);
+      opacityAnim.setValue(0);
+    }
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <Animated.View style={[styles.legendModalBox, {
+          backgroundColor: theme.card,
+          transform: [{ scale: scaleAnim }],
+          opacity: opacityAnim,
+          elevation: 20,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.3,
+          shadowRadius: 20
+        }]}>
+          <View style={{ alignItems: 'center', marginBottom: 25 }}>
+            <View style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: info.type === 'o' ? COLORS.prophetic + '15' : COLORS.christian + '15',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 15
+            }}>
+              {info.type === 'o' ? (
+                <Text style={{ color: COLORS.prophetic, fontSize: 50, fontWeight: 'bold' }}>♦</Text>
+              ) : (
+                <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: COLORS.christian }} />
+              )}
+            </View>
+            <Text style={[styles.legendModalTitle, { color: theme.text, textAlign: 'center', fontSize: 22 }]}>
+              {info.type === 'o' ? "Aperçu Historique" : "Aperçu Chronologique"}
+            </Text>
+          </View>
+
+          <View style={{ backgroundColor: theme.bg, padding: 20, borderRadius: 15, marginBottom: 25 }}>
+            <Text style={[styles.legendModalBody, { color: theme.text, textAlign: 'center', lineHeight: 24, fontSize: 16 }]}>
+              {info.message}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.legendCloseBtn, { backgroundColor: COLORS.primary, height: 55, borderRadius: 18 }]}
+            onPress={onClose}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>J'ai compris</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </View>
-    </View>
-  </Modal>
-);
+    </Modal>
+  );
+};
+
 
 function ReadingScreen() {
   const { progress, setProgress, history, setHistory, theme, openNoteEditor } = useContext(AppContext);
   const [legendVisible, setLegendVisible] = useState(false);
   const [legendInfo, setLegendInfo] = useState({ type: '', message: '' });
+
+  const sections = Object.entries(readingPlan).map(([title, data]) => ({
+    title,
+    data: data.flatMap(book => book.sections.map(s => ({ ...s, bookName: book.book })))
+  }));
 
   const showLegend = (type) => {
     const message = type === 'o'
@@ -541,6 +750,8 @@ function ReadingScreen() {
     const section = sectionObj.ch;
     const id = `${book}-${section}`;
     const newState = !progress[id];
+
+    // Optimistic Update
     const newProgress = { ...progress, [id]: newState };
     setProgress(newProgress);
     AsyncStorage.setItem('bibleProgress', JSON.stringify(newProgress));
@@ -550,101 +761,112 @@ function ReadingScreen() {
       const newHistory = [entry, ...history];
       setHistory(newHistory);
       AsyncStorage.setItem('bibleHistory', JSON.stringify(newHistory));
+    } else {
+      const newHistory = history.filter(h => h.id !== id);
+      setHistory(newHistory);
+      AsyncStorage.setItem('bibleHistory', JSON.stringify(newHistory));
     }
   };
 
+  const renderSectionItem = ({ item }) => {
+    const bookName = item.bookName;
+    const section = item.ch;
+    const id = `${bookName}-${section}`;
+    const isDone = progress[id];
+    const historyEntry = history.find(h => h.id === id);
+    const completionDate = historyEntry ? historyEntry.date : null;
+
+    return (
+      <View style={[styles.sectionRowJW, { borderBottomColor: theme.border, flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 15, paddingHorizontal: 15, backgroundColor: theme.card, marginBottom: 1, borderRadius: 5 }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity
+              onPress={() => toggleCheck(bookName, item)}
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 5 }}
+            >
+              {isDone ? <CheckSquare size={24} color={COLORS.primary} /> : <Square size={24} color="#ccc" />}
+              <View style={{ width: 12 }} />
+            </TouchableOpacity>
+
+            {item.m && (
+              <TouchableOpacity onPress={() => showLegend(item.m)} style={{ paddingVertical: 5, paddingRight: 10 }}>
+                {item.m === 'o' ? (
+                  <Text style={{ color: COLORS.prophetic, fontSize: 18, marginTop: -2 }}>♦</Text>
+                ) : (
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.christian }} />
+                )}
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              onPress={() => toggleCheck(bookName, item)}
+              style={{ flex: 1 }}
+            >
+              <Text style={[styles.sectionTxtJW, { color: theme.text, fontWeight: isDone ? 'bold' : 'normal', fontSize: 16 }]}>
+                {bookName} {section}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => openJWLink(bookName, section)}
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.accent, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+          >
+            <Text style={{ fontSize: 11, color: COLORS.primary, fontWeight: 'bold', marginRight: 5 }}>JW.ORG</Text>
+            <ExternalLink size={14} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, width: '100%', paddingLeft: 40 }}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            {isDone && completionDate && (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Calendar size={12} color="#888" style={{ marginRight: 5 }} />
+                <Text style={{ fontSize: 11, color: '#888' }}>{completionDate}</Text>
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity
+            onPress={() => openNoteEditor({ id: '', text: `Note sur ${bookName} ${section} : `, tags: [] })}
+            style={{ flexDirection: 'row', alignItems: 'center', borderColor: COLORS.primary, borderWidth: 0.8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 }}
+          >
+            <FileText size={16} color={COLORS.primary} />
+            <Text style={{ fontSize: 12, color: COLORS.primary, marginLeft: 6, fontWeight: 'bold' }}>Noter</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   return (
-    <ScrollView style={[styles.screen, { backgroundColor: theme.bg }]} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <LegendModal
         visible={legendVisible}
         info={legendInfo}
         onClose={() => setLegendVisible(false)}
         theme={theme}
       />
-      {Object.entries(readingPlan).map(([category, books], catIdx) => (
-        <View key={catIdx} style={styles.catGroup}>
-          <Text style={styles.catTitle}>{category}</Text>
-          {books.map((book, bIdx) => (
-            <View key={bIdx} style={[styles.bookCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.bookHeader, { color: theme.text }]}>{book.book}</Text>
-              <View style={styles.sectionGrid}>
-                {book.sections.map((sectionObj, sIdx) => {
-                  const section = sectionObj.ch;
-                  const id = `${book.book}-${section}`;
-                  const isDone = progress[id];
-                  const historyEntry = history.find(h => h.id === id);
-                  const completionDate = historyEntry ? historyEntry.date : null;
-
-                  return (
-                    <View key={sIdx} style={[styles.sectionRowJW, { borderBottomColor: theme.border, flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 15 }]}>
-                      {/* Ligne 1 : Case + Chapitres + Lien JW.ORG */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
-                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                          <TouchableOpacity
-                            onPress={() => toggleCheck(book.book, sectionObj)}
-                            style={{ flexDirection: 'row', alignItems: 'center' }}
-                          >
-                            {isDone ? <CheckSquare size={22} color={COLORS.primary} /> : <Square size={22} color="#ccc" />}
-                            <View style={{ width: 12 }} />
-                          </TouchableOpacity>
-
-                          {sectionObj.m && (
-                            <TouchableOpacity onPress={() => showLegend(sectionObj.m)} style={{ paddingVertical: 5, paddingRight: 8 }}>
-                              {sectionObj.m === 'o' ? (
-                                <Text style={{ color: COLORS.prophetic, fontSize: 18, marginTop: -2 }}>♦</Text>
-                              ) : (
-                                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.christian }} />
-                              )}
-                            </TouchableOpacity>
-                          )}
-
-                          <TouchableOpacity
-                            onPress={() => toggleCheck(book.book, sectionObj)}
-                            style={{ flex: 1 }}
-                          >
-                            <Text style={[styles.sectionTxtJW, { color: theme.text, fontWeight: isDone ? 'bold' : 'normal' }]}>{section}</Text>
-                          </TouchableOpacity>
-                        </View>
-
-                        <TouchableOpacity
-                          onPress={() => openJWLink(book.book, section)}
-                          style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.accent, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 5 }}
-                        >
-                          <Text style={{ fontSize: 11, color: COLORS.primary, fontWeight: 'bold', marginRight: 5 }}>JW.ORG</Text>
-                          <ExternalLink size={14} color={COLORS.primary} />
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Ligne 2 : Date + Note */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, width: '100%', paddingLeft: 34 }}>
-                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                          {isDone && completionDate && (
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <Calendar size={12} color="#888" style={{ marginRight: 5 }} />
-                              <Text style={{ fontSize: 11, color: '#888' }}>{completionDate}</Text>
-                            </View>
-                          )}
-                        </View>
-
-                        <TouchableOpacity
-                          onPress={() => openNoteEditor({ id: '', text: `Note sur ${book.book} ${section} : `, tags: [] })}
-                          style={{ flexDirection: 'row', alignItems: 'center', borderColor: COLORS.primary, borderWidth: 0.5, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 15 }}
-                        >
-                          <FileText size={16} color={COLORS.primary} />
-                          <Text style={{ fontSize: 12, color: COLORS.primary, marginLeft: 6 }}>Noter</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          ))}
-        </View>
-      ))}
-    </ScrollView>
+      <SectionList
+        sections={sections}
+        keyExtractor={(item, index) => item.bookName + item.ch + index}
+        renderItem={renderSectionItem}
+        renderSectionHeader={({ section: { title } }) => (
+          <View style={{ backgroundColor: theme.bg, paddingVertical: 15, paddingHorizontal: 15 }}>
+            <Text style={styles.catTitle}>{title}</Text>
+          </View>
+        )}
+        stickySectionHeadersEnabled={false}
+        initialNumToRender={15}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={true}
+        contentContainerStyle={{ paddingBottom: 30 }}
+      />
+    </View>
   );
 }
+
 
 
 function NoteEditorModal({ visible, currentNote, onClose }) {
@@ -675,14 +897,26 @@ function NoteEditorModal({ visible, currentNote, onClose }) {
   };
 
   return (
-    <Modal visible={visible} animationType="slide">
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <View style={[styles.modalHeader, { backgroundColor: COLORS.jwBlue }]}>
-          <TouchableOpacity onPress={onClose}><X size={24} color="#fff" /></TouchableOpacity>
-          <Text style={styles.modalTitle}>Note</Text>
-          <TouchableOpacity onPress={saveNote}><Save size={24} color="#fff" /></TouchableOpacity>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+        <View style={{
+          backgroundColor: COLORS.jwBlue,
+          paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+          paddingBottom: 10
+        }}>
+          <View style={[styles.modalHeader, { backgroundColor: COLORS.jwBlue, height: 60, elevation: 4 }]}>
+            <TouchableOpacity onPress={onClose} style={{ padding: 15 }}><X size={26} color="#fff" /></TouchableOpacity>
+            <Text style={[styles.modalTitle, { fontSize: 20 }]}>Note</Text>
+            <TouchableOpacity onPress={saveNote} style={{ padding: 15 }}><Save size={26} color="#fff" /></TouchableOpacity>
+          </View>
         </View>
+
         <ScrollView style={styles.modalScroll}>
+
           <TextInput
             style={[styles.modalNoteInput, { color: theme.text, backgroundColor: theme.card }]}
             multiline
@@ -739,7 +973,7 @@ function NoteEditorModal({ visible, currentNote, onClose }) {
             </ScrollView>
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -872,7 +1106,7 @@ function AboutScreen() {
         <Text style={[styles.sectionTitleJW, { color: theme.text }]}>Utilité de l'application</Text>
         <Text style={[styles.aboutText, { color: theme.text }]}>
           Cette application est conçue pour aider chaque chrétien à maintenir un rythme de lecture biblique quotidien.
-          En suivant ce plan de 260 sections, vous pouvez lire l'intégralité de la Parole de Dieu en une année.
+          En suivant ce plan de 368 sections, vous pouvez lire l'intégralité de la Parole de Dieu en une année.
         </Text>
 
         <Text style={[styles.sectionTitleJW, { color: theme.text, marginTop: 20 }]}>Comment l'utiliser ?</Text>
@@ -908,7 +1142,7 @@ function AboutScreen() {
 function HistoryModal({ visible, onClose }) {
   const { history, theme } = useContext(AppContext);
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
       <View style={styles.settingsOverlay}>
         <View style={[styles.settingsBox, { backgroundColor: theme.card, height: '90%' }]}>
           <View style={styles.settingsHeader}>
@@ -1011,7 +1245,7 @@ function ReminderModal({ visible, onClose, currentConfig, onSave }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.settingsOverlay}>
         <View style={[styles.settingsBox, { backgroundColor: theme.card, height: 'auto', maxHeight: '80%', position: 'relative', bottom: 'auto' }]}>
           <View style={styles.settingsHeader}>
@@ -1119,8 +1353,9 @@ function SettingsModal({ visible, onClose }) {
         userPhoto,
         isDarkMode,
         reminderConfig,
-        exportDate: new Date().toISOString()
+        exportDate: new Date().toLocaleDateString('fr-FR')
       };
+
       const json = JSON.stringify(data, null, 2);
       const fileName = `bible_backup_${new Date().getTime()}.json`;
 
@@ -1136,23 +1371,21 @@ function SettingsModal({ visible, onClose }) {
         return;
       }
 
-      const filePath = FileSystem.cacheDirectory + fileName;
-      await FileSystem.writeAsStringAsync(filePath, json);
-
-      if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert("Erreur", "Le partage n'est pas disponible.");
-        return;
-      }
+      // Chemin temporaire propre sur Android/iOS
+      const filePath = `${FileSystem.cacheDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(filePath, json, { encoding: FileSystem.EncodingType.UTF8 });
 
       await Sharing.shareAsync(filePath, {
         mimeType: 'application/json',
-        dialogTitle: 'Sauvegarder mes données',
+        dialogTitle: 'Exporter mes données de lecture',
         UTI: 'public.json'
       });
     } catch (e) {
+      console.error(e);
       Alert.alert("Erreur", "La sauvegarde a échoué.");
     }
   };
+
 
   const importData = async () => {
     try {
@@ -1193,7 +1426,7 @@ function SettingsModal({ visible, onClose }) {
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
       <View style={styles.settingsOverlay}>
         <View style={[styles.settingsBox, { backgroundColor: theme.card }]}>
           <View style={styles.settingsHeader}>
@@ -1254,9 +1487,21 @@ function SettingsModal({ visible, onClose }) {
               }}
             />
 
+            <TouchableOpacity
+              style={styles.settingItemAction}
+              onPress={() => { onClose(); setIsFirstLaunch(true); }}
+            >
+              <Info size={20} color={COLORS.jwBlue} />
+              <View style={{ marginLeft: 15 }}>
+                <Text style={{ color: theme.text }}>Relancer le Guide d'utilisation</Text>
+                <Text style={{ color: '#888', fontSize: 11 }}>Revoir toutes les fonctionnalités</Text>
+              </View>
+            </TouchableOpacity>
+
             <View style={styles.settingDivider} />
 
             <Text style={[styles.sectionTitleJW, { color: theme.text, fontSize: 14, marginTop: 10 }]}>Données & Sécurité</Text>
+
 
             <TouchableOpacity style={styles.settingItemAction} onPress={exportData}>
               <Save size={20} color={COLORS.jwBlue} />
@@ -1401,7 +1646,13 @@ const styles = StyleSheet.create({
   tagText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
   fab: { position: 'absolute', right: 20, bottom: 20, backgroundColor: COLORS.jwBlue, width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5 },
 
-  modalHeader: { height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
+  modalHeader: {
+    height: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
+  },
   modalTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   modalNoteInput: { flex: 1, height: 300, padding: 20, fontSize: 18, textAlignVertical: 'top' },
   tagsSection: { padding: 20 },
