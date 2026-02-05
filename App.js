@@ -259,6 +259,35 @@ const openJWLink = (bookName, section) => {
   Linking.openURL(url);
 };
 
+// --- Utils: Base64 pour "chiffrement" des sauvegardes ---
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+const btoa_poly = (input = '') => {
+  let str = input;
+  let output = '';
+  for (let block = 0, charCode, i = 0, map = chars;
+    str.charAt(i | 0) || (map = '=', i % 1);
+    output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
+    charCode = str.charCodeAt(i += 3 / 4);
+    if (charCode > 0xFF) throw new Error("'btoa' failed");
+    block = block << 8 | charCode;
+  }
+  return output;
+};
+const atob_poly = (input = '') => {
+  let str = input.replace(/[=]+$/, '');
+  let output = '';
+  for (let bc = 0, bs = 0, buffer, i = 0;
+    buffer = str.charAt(i++);
+    ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
+      bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
+  ) {
+    buffer = chars.indexOf(buffer);
+  }
+  return output;
+};
+const base64Encode = (str) => btoa_poly(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
+const base64Decode = (str) => decodeURIComponent(atob_poly(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+
 // --- Context ---
 const AppContext = createContext();
 
@@ -279,7 +308,19 @@ export default function App() {
 
   useEffect(() => {
     loadAppState();
+    setupNotifications();
   }, []);
+
+  const setupNotifications = async () => {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('daily-reading', {
+        name: 'Rappels de lecture',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: COLORS.jwBlue,
+      });
+    }
+  };
 
   useEffect(() => {
     const backAction = () => {
@@ -1205,7 +1246,13 @@ const scheduleNotification = async (reminderConfig) => {
           title: "📖 Temps de lecture !",
           body: `C'est l'heure de votre lecture pour ce ${day} !`,
         },
-        trigger: { hour: hours, minute: minutes, weekday: DAYS_MAP[day], repeats: true },
+        trigger: {
+          hour: hours,
+          minute: minutes,
+          weekday: DAYS_MAP[day],
+          repeats: true,
+          channelId: 'daily-reading'
+        },
       });
       count++;
     }
@@ -1356,11 +1403,14 @@ function SettingsModal({ visible, onClose }) {
         exportDate: new Date().toLocaleDateString('fr-FR')
       };
 
-      const json = JSON.stringify(data, null, 2);
-      const fileName = `bible_backup_${new Date().getTime()}.json`;
+      const json = JSON.stringify(data);
+      const encrypted = base64Encode(json);
+      const safeName = (userName || 'user').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const dateStr = new Date().toISOString().split('T')[0];
+      const fileName = `${safeName}-${dateStr}-${Date.now()}.json`;
 
       if (Platform.OS === 'web') {
-        const blob = new Blob([json], { type: 'application/json' });
+        const blob = new Blob([encrypted], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = fileName;
@@ -1373,11 +1423,11 @@ function SettingsModal({ visible, onClose }) {
 
       // Chemin temporaire propre sur Android/iOS
       const filePath = `${FileSystem.cacheDirectory}${fileName}`;
-      await FileSystem.writeAsStringAsync(filePath, json, { encoding: FileSystem.EncodingType.UTF8 });
+      await FileSystem.writeAsStringAsync(filePath, encrypted, { encoding: FileSystem.EncodingType.UTF8 });
 
       await Sharing.shareAsync(filePath, {
-        mimeType: 'application/json',
-        dialogTitle: 'Exporter mes données de lecture',
+        mimeType: 'text/plain',
+        dialogTitle: 'Exporter ma sauvegarde sécurisée',
         UTI: 'public.json'
       });
     } catch (e) {
@@ -1389,10 +1439,24 @@ function SettingsModal({ visible, onClose }) {
 
   const importData = async () => {
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: 'application/json' });
+      const res = await DocumentPicker.getDocumentAsync({ type: '*/*' });
       if (!res.canceled && res.assets && res.assets.length > 0) {
         const fileContent = await FileSystem.readAsStringAsync(res.assets[0].uri);
-        const data = JSON.parse(fileContent);
+
+        let data;
+        try {
+          // Tenter de décoder le Base64 (nouveau format)
+          const decoded = base64Decode(fileContent);
+          data = JSON.parse(decoded);
+        } catch (e) {
+          // Repli sur le JSON brut (ancien format / compatibilité)
+          try {
+            data = JSON.parse(fileContent);
+          } catch (e2) {
+            Alert.alert("Erreur", "Le fichier de sauvegarde est corrompu ou invalide.");
+            return;
+          }
+        }
 
         Alert.alert("Restaurer", "Cela remplacera vos données actuelles. Continuer ?", [
           { text: "Annuler" },
