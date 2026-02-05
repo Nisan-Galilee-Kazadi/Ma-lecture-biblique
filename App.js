@@ -1245,13 +1245,13 @@ const scheduleNotification = async (reminderConfig) => {
         content: {
           title: "📖 Temps de lecture !",
           body: `C'est l'heure de votre lecture pour ce ${day} !`,
+          channelId: 'daily-reading',
         },
         trigger: {
           hour: hours,
           minute: minutes,
           weekday: DAYS_MAP[day],
           repeats: true,
-          channelId: 'daily-reading'
         },
       });
       count++;
@@ -1432,7 +1432,7 @@ function SettingsModal({ visible, onClose }) {
       });
     } catch (e) {
       console.error(e);
-      Alert.alert("Erreur", "La sauvegarde a échoué.");
+      Alert.alert("Erreur de sauvegarde", e.message || "Impossible d'exporter les données.");
     }
   };
 
