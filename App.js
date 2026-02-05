@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -55,7 +55,9 @@ import {
   Plus,
   Trash2,
   Search,
-  Info
+  Info,
+  LayoutGrid,
+  ArrowUp
 } from 'lucide-react-native';
 
 Notifications.setNotificationHandler({
@@ -106,6 +108,23 @@ const BIBLE_BOOKS_MAP = {
   '1 TIMOTHÉE': 54, '2 TIMOTHÉE': 55, 'TITE': 56, 'PHILÉMON': 57, 'HÉBREUX': 58,
   'JACQUES': 59, '1 PIERRE': 60, '2 PIERRE': 61, '1 JEAN': 62, '2 JEAN': 63,
   '3 JEAN': 64, 'JUDE': 65, 'RÉVÉLATION': 66
+};
+
+const BOOK_ABBREVIATIONS = {
+  'GENÈSE': 'Gn', 'EXODE': 'Ex', 'LÉVITIQUE': 'Lv', 'NOMBRES': 'Nb', 'DEUTÉRONOME': 'Dt',
+  'JOSUÉ': 'Jos', 'JUGES': 'Jg', 'RUTH': 'Ru', '1 SAMUEL': '1S', '2 SAMUEL': '2S',
+  '1 ROIS': '1R', '2 ROIS': '2R', '1 CHRONIQUES': '1Ch', '2 CHRONIQUES': '2Ch',
+  'ESDRAS': 'Esd', 'NÉHÉMIE': 'Né', 'ESTHER': 'Est', 'JOB': 'Jb', 'PSAUMES': 'Ps',
+  'PROVERBES': 'Pr', 'ECCLÉSIASTE': 'Ec', 'CHANT DE SALOMON': 'Ct', 'ISAÏE': 'Is',
+  'JÉRÉMIE': 'Jr', 'LAMENTATIONS': 'Lm', 'ÉZÉCHIEL': 'Éz', 'DANIEL': 'Dn', 'OSÉE': 'Os',
+  'JOËL': 'Jl', 'AMOS': 'Am', 'ABDIAS': 'Ab', 'JONAS': 'Jon', 'MICHÉE': 'Mi',
+  'NAHUM': 'Na', 'HABACUC': 'Hab', 'SOPHONIE': 'Sph', 'AGGÉE': 'Ag', 'ZACHARIE': 'Za',
+  'MALACHIE': 'Ml', 'MATTHIEU': 'Mt', 'MARC': 'Mc', 'LUC': 'Lc', 'JEAN': 'Jean',
+  'ACTES': 'Ac', 'ROMAINS': 'Rm', '1 CORINTHIENS': '1Co', '2 CORINTHIENS': '2Co', 'GALATES': 'Ga',
+  'ÉPHÉSIENS': 'Éph', 'PHILIPPIENS': 'Php', 'COLOSSIENS': 'Col', '1 THESSALONICIENS': '1Th', '2 THESSALONICIENS': '2Th',
+  '1 TIMOTHÉE': '1Tm', '2 TIMOTHÉE': '2Tm', 'TITE': 'Tt', 'PHILÉMON': 'Phm', 'HÉBREUX': 'Hé',
+  'JACQUES': 'Jc', '1 PIERRE': '1P', '2 PIERRE': '2P', '1 JEAN': '1Jn', '2 JEAN': '2Jn',
+  '3 JEAN': '3Jn', 'JUDE': 'Jude', 'RÉVÉLATION': 'Rév'
 };
 
 // --- Données du Plan de Lecture (Plan Officiel JW.ORG - 368 sections) ---
@@ -768,20 +787,85 @@ const LegendModal = ({ visible, info, onClose, theme }) => {
   );
 };
 
+const BookGridModal = ({ visible, onClose, onSelectBook, theme }) => {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.settingsBox, { backgroundColor: theme.card, height: '80%' }]}>
+          <View style={styles.settingsHeader}>
+            <Text style={[styles.settingsTitle, { color: theme.text }]}>Navigation Rapide</Text>
+            <TouchableOpacity onPress={onClose}><X size={24} color={theme.text} /></TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingBottom: 20 }}>
+            {Object.keys(BIBLE_BOOKS_MAP).map((book) => (
+              <TouchableOpacity
+                key={book}
+                style={{
+                  width: '18%',
+                  aspectRatio: 1,
+                  backgroundColor: book === 'MATTHIEU' ? COLORS.christian : (Object.keys(BIBLE_BOOKS_MAP).indexOf(book) < 39 ? COLORS.jwBlue : COLORS.christian),
+                  borderRadius: 8,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  opacity: book === 'MATTHIEU' ? 1 : 0.8
+                }}
+                onPress={() => onSelectBook(book)}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>
+                  {BOOK_ABBREVIATIONS[book] || book.substring(0, 2)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 
 function ReadingScreen() {
   const { progress, setProgress, history, setHistory, theme, openNoteEditor } = useContext(AppContext);
   const [legendVisible, setLegendVisible] = useState(false);
+  const [bookModalVisible, setBookModalVisible] = useState(false);
   const [legendInfo, setLegendInfo] = useState({ type: '', message: '' });
+  const listRef = useRef(null);
 
   const sections = Object.entries(readingPlan).map(([title, data]) => ({
     title,
     data: data.flatMap(book => book.sections.map(s => ({ ...s, bookName: book.book })))
   }));
 
+  const handleScrollToBook = (bookName) => {
+    setBookModalVisible(false);
+    let sectionIndex = -1;
+    let itemIndex = -1;
+
+    for (let i = 0; i < sections.length; i++) {
+      const sectionData = sections[i].data;
+      const index = sectionData.findIndex(item => item.bookName === bookName);
+      if (index !== -1) {
+        sectionIndex = i;
+        itemIndex = index;
+        break;
+      }
+    }
+
+    if (sectionIndex !== -1 && listRef.current) {
+      setTimeout(() => {
+        listRef.current.scrollToLocation({
+          sectionIndex,
+          itemIndex,
+          animated: true,
+          viewOffset: 0
+        });
+      }, 300);
+    }
+  };
+
   const showLegend = (type) => {
     const message = type === 'o'
-      ? "Les chapitres marqués d’un losange ROUGE donnent un aperçu historique des manières d’agir de Dieu avec les Israélites."
+      ? "Les chapitres marqués d’un losange ORANGE donnent un aperçu historique des manières d’agir de Dieu avec les Israélites."
       : "Les chapitres marqués d’un rond BLEU donnent un aperçu chronologique du développement de l’assemblée chrétienne.";
     setLegendInfo({ type, message });
     setLegendVisible(true);
@@ -888,7 +972,14 @@ function ReadingScreen() {
         onClose={() => setLegendVisible(false)}
         theme={theme}
       />
+      <BookGridModal
+        visible={bookModalVisible}
+        onClose={() => setBookModalVisible(false)}
+        onSelectBook={handleScrollToBook}
+        theme={theme}
+      />
       <SectionList
+        ref={listRef}
         sections={sections}
         keyExtractor={(item, index) => item.bookName + item.ch + index}
         renderItem={renderSectionItem}
@@ -904,6 +995,22 @@ function ReadingScreen() {
         removeClippedSubviews={true}
         contentContainerStyle={{ paddingBottom: 30 }}
       />
+
+      {/* Scroll to Top */}
+      <TouchableOpacity
+        style={[styles.fab, { bottom: 100, width: 45, height: 45, backgroundColor: theme.card, borderWidth: 1, borderColor: '#eee' }]}
+        onPress={() => listRef.current?.scrollToLocation({ sectionIndex: 0, itemIndex: 0, animated: true })}
+      >
+        <ArrowUp size={20} color={theme.text} />
+      </TouchableOpacity>
+
+      {/* Grid Menu */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setBookModalVisible(true)}
+      >
+        <LayoutGrid size={24} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }
