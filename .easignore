@@ -7,3 +7,7 @@ yarn-error.log*
 .env
 android/
 ios/
+*.pdf
+config_error.txt
+doctor_*.txt
+convert_assets.ps1

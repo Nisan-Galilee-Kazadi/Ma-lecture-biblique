@@ -3,31 +3,10 @@ import { Modal, View, Text, TouchableOpacity, FlatList, StyleSheet } from 'react
 import { X, CheckSquare, ExternalLink, History as HistoryIcon } from 'lucide-react-native';
 import { COLORS } from '../../constants/theme';
 import { AppContext } from '../../context/AppContext';
-import { Linking } from 'react-native';
-import { BIBLE_BOOKS_MAP } from '../../constants/bibleData';
+import { openJWLink } from '../../utils/jwLinks';
 
 export default function HistoryModal({ visible, onClose }) {
     const { history, theme } = useContext(AppContext);
-
-    const openJWLink = (bookName, section) => {
-        const bookNum = BIBLE_BOOKS_MAP[bookName.toUpperCase()] || 1;
-        let chStart = 1, chEnd = 1;
-
-        if (section && section.includes('-')) {
-            const parts = section.split('-');
-            chStart = parseInt(parts[0]);
-            chEnd = parseInt(parts[1]);
-        } else if (section) {
-            chStart = chEnd = parseInt(section);
-        }
-
-        const bStr = bookNum.toString().padStart(2, '0');
-        const sStr = chStart.toString().padStart(3, '0');
-        const eStr = chEnd.toString().padStart(3, '0');
-
-        const url = `https://www.jw.org/finder?wtlocale=F&pub=nwt&bible=${bStr}${sStr}001-${bStr}${eStr}999&prefer=lang`;
-        Linking.openURL(url);
-    };
 
     return (
         <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>

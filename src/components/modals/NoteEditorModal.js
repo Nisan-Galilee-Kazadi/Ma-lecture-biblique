@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Platform, StatusBar, StyleSheet } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Platform, StatusBar, StyleSheet, Alert } from 'react-native';
 import { X, Save, Plus } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../../constants/theme';
@@ -18,18 +18,45 @@ export default function NoteEditorModal({ visible, currentNote, onClose }) {
         }
     }, [visible, currentNote]);
 
-    const saveNote = () => {
-        if (noteContent.trim()) {
+    const saveNote = async () => {
+        try {
+            // Validation des données
+            if (!noteContent.trim()) {
+                return; // Ne rien faire si la note est vide
+            }
+
+            // Limiter la longueur de la note
+            if (noteContent.length > 10000) {
+                Alert.alert("Erreur", "La note est trop longue (maximum 10000 caractères)");
+                return;
+            }
+
+            // Valider les tags
+            const validTags = tags.filter(tag => tag.trim().length > 0 && tag.length < 50);
+
             let newNotes;
             if (currentNote.id) {
-                newNotes = notes.map(n => n.id === currentNote.id ? { ...currentNote, text: noteContent, tags, date: new Date().toLocaleDateString() } : n);
+                // Mise à jour d'une note existante
+                newNotes = notes.map(n => 
+                    n.id === currentNote.id 
+                        ? { ...currentNote, text: noteContent, tags: validTags, date: new Date().toLocaleDateString() } 
+                        : n
+                );
             } else {
-                newNotes = [{ id: Date.now().toString(), text: noteContent, tags, date: new Date().toLocaleDateString() }, ...notes];
+                // Création d'une nouvelle note
+                newNotes = [
+                    { id: Date.now().toString(), text: noteContent, tags: validTags, date: new Date().toLocaleDateString() }, 
+                    ...notes
+                ];
             }
+
             setNotes(newNotes);
-            AsyncStorage.setItem('bibleNotes', JSON.stringify(newNotes));
+            await AsyncStorage.setItem('bibleNotes', JSON.stringify(newNotes));
+            onClose();
+        } catch (error) {
+            console.error('Erreur lors de la sauvegarde de la note:', error);
+            Alert.alert("Erreur", "Impossible de sauvegarder la note. Veuillez réessayer.");
         }
-        onClose();
     };
 
     return (

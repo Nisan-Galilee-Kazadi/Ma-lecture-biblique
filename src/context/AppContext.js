@@ -25,13 +25,23 @@ export const AppContextProvider = ({ children }) => {
     }, []);
 
     const setupNotifications = async () => {
-        if (Platform.OS === 'android') {
-            await Notifications.setNotificationChannelAsync('daily-reading', {
-                name: 'Rappels de lecture',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: COLORS.jwBlue,
-            });
+        try {
+            // Demander les permissions de notification
+            const { status } = await Notifications.requestPermissionsAsync();
+            if (status !== 'granted') {
+                return;
+            }
+
+            if (Platform.OS === 'android') {
+                await Notifications.setNotificationChannelAsync('daily-reading', {
+                    name: 'Rappels de lecture',
+                    importance: Notifications.AndroidImportance.MAX,
+                    vibrationPattern: [0, 250, 250, 250],
+                    lightColor: COLORS.jwBlue,
+                });
+            }
+        } catch (error) {
+            // Erreur silencieuse pour les notifications
         }
     };
 
@@ -53,9 +63,10 @@ export const AppContextProvider = ({ children }) => {
             if (data.isDarkMode !== null) setIsDarkMode(JSON.parse(data.isDarkMode));
             if (data.reminderConfig) setReminderConfig(JSON.parse(data.reminderConfig));
 
-            setTimeout(() => setIsAppLoading(false), 2000);
+            setTimeout(() => {
+                setIsAppLoading(false);
+            }, 1000);
         } catch (e) {
-            console.error(e);
             setIsAppLoading(false);
         }
     };

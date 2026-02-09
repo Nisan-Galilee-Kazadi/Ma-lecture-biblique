@@ -9,39 +9,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { COLORS } from '../../constants/theme';
 import { AppContext } from '../../context/AppContext';
+import { base64Encode, base64Decode } from '../../utils/encryption';
 import ReminderModal from './ReminderModal';
 
 const DAYS_MAP = { 'Dimanche': 1, 'Lundi': 2, 'Mardi': 3, 'Mercredi': 4, 'Jeudi': 5, 'Vendredi': 6, 'Samedi': 7 };
 const DAYS_FR = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
-
-// --- Utils: Base64 helpers ---
-const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-const btoa_poly = (input = '') => {
-    let str = input;
-    let output = '';
-    for (let block = 0, charCode, i = 0, map = chars;
-        str.charAt(i | 0) || (map = '=', i % 1);
-        output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
-        charCode = str.charCodeAt(i += 3 / 4);
-        if (charCode > 0xFF) throw new Error("'btoa' failed");
-        block = block << 8 | charCode;
-    }
-    return output;
-};
-const atob_poly = (input = '') => {
-    let str = input.replace(/[=]+$/, '');
-    let output = '';
-    for (let bc = 0, bs = 0, buffer, i = 0;
-        buffer = str.charAt(i++);
-        ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
-            bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
-    ) {
-        buffer = chars.indexOf(buffer);
-    }
-    return output;
-};
-const base64Encode = (str) => btoa_poly(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
-const base64Decode = (str) => decodeURIComponent(atob_poly(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
 
 
 export default function SettingsModal({ visible, onClose }) {
@@ -125,7 +97,7 @@ export default function SettingsModal({ visible, onClose }) {
         }
 
         if (count > 0) {
-            Alert.alert("Succès", `${count} rappel(s) configuré(s) !`);
+            console.log(`${count} rappel(s) configuré(s) !`);
         }
     };
 
@@ -149,17 +121,16 @@ export default function SettingsModal({ visible, onClose }) {
             const fileName = `${safeName}-${dateStr}-${Date.now()}.json`;
 
             if (Platform.OS === 'web') {
-                // ... web logic simplified or mocked for now as standard file system is focus
-                Alert.alert("Info", "Export Web non supporté pleinement ici.");
+                Alert.alert("Info", "L'exportation n'est pas disponible sur navigateur Web.");
                 return;
             }
 
             const filePath = `${FileSystem.cacheDirectory}${fileName}`;
-            await FileSystem.writeAsStringAsync(filePath, encrypted, { encoding: FileSystem.EncodingType.UTF8 });
+            await FileSystem.writeAsStringAsync(filePath, encrypted, { encoding: 'utf8' });
 
             await Sharing.shareAsync(filePath, {
-                mimeType: 'text/plain',
-                dialogTitle: 'Exporter ma sauvegarde sécurisée',
+                mimeType: 'application/json',
+                dialogTitle: 'Exporter ma sauvegarde',
                 UTI: 'public.json'
             });
         } catch (e) {
@@ -275,9 +246,16 @@ export default function SettingsModal({ visible, onClose }) {
                             onClose={() => setReminderVisible(false)}
                             currentConfig={reminderConfig}
                             onSave={async (config) => {
-                                setReminderConfig(config);
-                                await AsyncStorage.setItem('reminderConfig', JSON.stringify(config));
-                                scheduleNotification(config);
+                                try {
+                                    await AsyncStorage.setItem('reminderConfig', JSON.stringify(config));
+                                    setReminderConfig(config);
+                                    await scheduleNotification(config);
+
+                                    Alert.alert("Succès", "Les rappels ont été sauvegardés et programmés !");
+                                } catch (error) {
+                                    console.error('Erreur lors de la sauvegarde des rappels:', error);
+                                    Alert.alert("Erreur", "Impossible de sauvegarder les rappels. Veuillez réessayer.");
+                                }
                             }}
                         />
 
